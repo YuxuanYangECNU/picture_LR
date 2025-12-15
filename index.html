@@ -255,11 +255,12 @@
             font-size: 0.9em;
         }
         
-        canvas {
+        .histogram-canvas {
             width: 100%;
-            height: 120px;
+            height: 150px;
             border-radius: 6px;
-            background: rgba(0,0,0,0.2);
+            background: rgba(0,0,0,0.3);
+            display: block;
         }
         
         .hsl-section {
@@ -441,11 +442,11 @@
                 <div class="histogram-container">
                     <div class="histogram-box">
                         <h4>原图 Source</h4>
-                        <canvas id="sourceHist"></canvas>
+                        <canvas id="sourceHist" class="histogram-canvas"></canvas>
                     </div>
                     <div class="histogram-box">
                         <h4>目标 Target</h4>
-                        <canvas id="targetHist"></canvas>
+                        <canvas id="targetHist" class="histogram-canvas"></canvas>
                     </div>
                 </div>
             </div>
@@ -462,7 +463,7 @@
         </div>
         
         <footer>
-            <p>Made with ❤️ by <a href="https://github.com/YuxuanYangECNU/picture_LR" target="_blank">GitHub</a></p>
+            <p>Made with ❤️ | <a href="https://github.com/YuxuanYangECNU/picture_LR" target="_blank">GitHub</a></p>
             <p>纯前端实现，图片不会上传到服务器</p>
         </footer>
     </div>
@@ -474,17 +475,14 @@
                 this.colorNames = ['红', '橙', '黄', '绿', '青', '蓝', '紫', '品红'];
                 this.colorNamesEn = ['Red', 'Orange', 'Yellow', 'Green', 'Aqua', 'Blue', 'Purple', 'Magenta'];
                 this.colorHex = ['#FF5555', '#FF9955', '#FFFF55', '#55FF55', '#55FFFF', '#5555FF', '#9955FF', '#FF55AA'];
-                // HSV 色相范围 (0-360 映射到 0-180)
                 this.hueRanges = [[0, 15], [15, 35], [35, 55], [55, 85], [85, 110], [110, 140], [140, 160], [160, 180]];
             }
             
-            // 从图片获取像素数据
             getImageData(img) {
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
                 
-                // 限制大小以提高性能
-                const maxSize = 800;
+                const maxSize = 600;
                 let w = img.naturalWidth || img.width;
                 let h = img.naturalHeight || img.height;
                 
@@ -505,7 +503,6 @@
                 return ctx.getImageData(0, 0, w, h);
             }
             
-            // RGB 转 HSV
             rgbToHsv(r, g, b) {
                 r /= 255; g /= 255; b /= 255;
                 const max = Math.max(r, g, b), min = Math.min(r, g, b);
@@ -525,68 +522,57 @@
                     h /= 6;
                 }
                 
-                return [h * 180, s * 100, v * 100]; // H: 0-180, S: 0-100, V: 0-100
+                return [h * 180, s * 100, v * 100];
             }
             
-            // RGB 转 LAB (简化版)
             rgbToLab(r, g, b) {
-                // 简化：使用亮度公式
                 const L = 0.299 * r + 0.587 * g + 0.114 * b;
-                // a: 红-绿
                 const a = (r - g) * 0.5;
-                // b: 黄-蓝
                 const lab_b = (r + g) * 0.25 - b * 0.5;
                 return [L, a, lab_b];
             }
             
-            // 分析图片
             analyze(imageData) {
                 const data = imageData.data;
                 const pixels = data.length / 4;
                 
-                // 直方图
+                // 初始化直方图数组
                 const histR = new Array(256).fill(0);
                 const histG = new Array(256).fill(0);
                 const histB = new Array(256).fill(0);
                 const histLum = new Array(256).fill(0);
                 
-                // 统计变量
-                let sumL = 0, sumA = 0, sumB = 0;
-                let sumS = 0;
+                let sumL = 0, sumA = 0, sumB = 0, sumS = 0;
                 let shadowsL = [], midtonesL = [], highlightsL = [];
                 
-                // HSL 统计
                 const hslStats = this.hueRanges.map(() => ({ 
                     count: 0, sumH: 0, sumS: 0, sumL: 0 
                 }));
                 
-                // 分区色调
                 const shadowsHS = [], midtonesHS = [], highlightsHS = [];
                 
+                // 遍历所有像素
                 for (let i = 0; i < data.length; i += 4) {
                     const r = data[i];
                     const g = data[i + 1];
                     const b = data[i + 2];
                     
-                    // 直方图
+                    // 直方图累加
                     histR[r]++;
                     histG[g]++;
                     histB[b]++;
                     
-                    // LAB
                     const [L, a, lab_b] = this.rgbToLab(r, g, b);
-                    const lumIndex = Math.min(255, Math.floor(L));
+                    const lumIndex = Math.min(255, Math.max(0, Math.floor(L)));
                     histLum[lumIndex]++;
                     
                     sumL += L;
                     sumA += a;
                     sumB += lab_b;
                     
-                    // HSV
                     const [h, s, v] = this.rgbToHsv(r, g, b);
                     sumS += s;
                     
-                    // 分区
                     if (L < 85) {
                         shadowsL.push(L);
                         if (s > 10) shadowsHS.push([h, s]);
@@ -598,7 +584,6 @@
                         if (s > 10) highlightsHS.push([h, s]);
                     }
                     
-                    // HSL 按颜色统计
                     if (s > 10) {
                         for (let j = 0; j < this.hueRanges.length; j++) {
                             const [hMin, hMax] = this.hueRanges[j];
@@ -613,13 +598,11 @@
                     }
                 }
                 
-                // 计算统计值
                 const avgL = sumL / pixels;
                 const avgA = sumA / pixels;
                 const avgB = sumB / pixels;
                 const avgS = sumS / pixels;
                 
-                // 对比度 (标准差)
                 let sumSqDiff = 0;
                 for (let i = 0; i < data.length; i += 4) {
                     const L = this.rgbToLab(data[i], data[i+1], data[i+2])[0];
@@ -627,28 +610,28 @@
                 }
                 const contrast = Math.sqrt(sumSqDiff / pixels);
                 
-                // 分区平均
                 const shadowsAvg = shadowsL.length > 0 ? shadowsL.reduce((a,b) => a+b, 0) / shadowsL.length : 42;
                 const midtonesAvg = midtonesL.length > 0 ? midtonesL.reduce((a,b) => a+b, 0) / midtonesL.length : 128;
                 const highlightsAvg = highlightsL.length > 0 ? highlightsL.reduce((a,b) => a+b, 0) / highlightsL.length : 212;
                 
-                // 黑白点
-                const sortedLum = [];
-                for (let i = 0; i < 256; i++) {
-                    for (let j = 0; j < histLum[i]; j++) {
-                        sortedLum.push(i);
-                    }
-                }
-                const blackPoint = sortedLum[Math.floor(pixels * 0.01)] || 0;
-                const whitePoint = sortedLum[Math.floor(pixels * 0.99)] || 255;
+                // 计算黑白点
+                let cumSum = 0;
+                let blackPoint = 0, whitePoint = 255;
+                const p1 = pixels * 0.01;
+                const p99 = pixels * 0.99;
                 
-                // HSL 各颜色
+                for (let i = 0; i < 256; i++) {
+                    cumSum += histLum[i];
+                    if (cumSum >= p1 && blackPoint === 0) blackPoint = i;
+                    if (cumSum >= p99) { whitePoint = i; break; }
+                }
+                
                 const hslHue = [], hslSat = [], hslLum = [], hslWeight = [];
                 for (let j = 0; j < this.hueRanges.length; j++) {
                     const stat = hslStats[j];
                     hslWeight.push(stat.count / pixels * 100);
                     if (stat.count > 100) {
-                        hslHue.push(stat.sumH / stat.count * 2); // 转到 0-360
+                        hslHue.push(stat.sumH / stat.count * 2);
                         hslSat.push(stat.sumS / stat.count);
                         hslLum.push(stat.sumL / stat.count);
                     } else {
@@ -658,7 +641,6 @@
                     }
                 }
                 
-                // 分区色调
                 const calcZoneColor = (arr) => {
                     if (arr.length < 10) return [0, 0];
                     let sumH = 0, sumS = 0, totalWeight = 0;
@@ -674,10 +656,11 @@
                 const [midtonesHue, midtonesSat] = calcZoneColor(midtonesHS);
                 const [highlightsHue, highlightsSat] = calcZoneColor(highlightsHS);
                 
-                // 清晰度估计 (使用边缘检测的简化版)
+                // 清晰度
                 let edgeSum = 0;
                 const w = imageData.width;
-                for (let y = 1; y < imageData.height - 1; y++) {
+                const h_img = imageData.height;
+                for (let y = 1; y < h_img - 1; y++) {
                     for (let x = 1; x < w - 1; x++) {
                         const idx = (y * w + x) * 4;
                         const L = this.rgbToLab(data[idx], data[idx+1], data[idx+2])[0];
@@ -688,19 +671,20 @@
                 }
                 const localContrast = edgeSum / pixels * 0.5;
                 
-                // 朦胧度 (暗通道)
                 let darkSum = 0;
                 for (let i = 0; i < data.length; i += 4) {
                     darkSum += Math.min(data[i], data[i+1], data[i+2]);
                 }
                 const hazeLevel = darkSum / pixels / 255 * 100;
                 
-                // 色调曲线
                 const curveRef = [42, 85, 170, 212];
-                const curveActual = [shadowsAvg, midtonesAvg * 0.7, midtonesAvg * 1.3, highlightsAvg];
                 
                 return {
-                    histR, histG, histB, histLum,
+                    histR: histR,
+                    histG: histG,
+                    histB: histB,
+                    histLum: histLum,
+                    pixels: pixels,
                     brightness: avgL,
                     contrast,
                     temperature: 6500 + avgB * 2,
@@ -724,7 +708,6 @@
                 };
             }
             
-            // 计算调整参数
             calculateAdjustments(source, target) {
                 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
                 
@@ -750,14 +733,8 @@
                     curveDarks: clamp((target.curveDarks - source.curveDarks) * 0.5, -100, 100),
                     curveLights: clamp((target.curveLights - source.curveLights) * 0.5, -100, 100),
                     curveHighlights: clamp((target.curveHighlights - source.curveHighlights) * 0.5, -100, 100),
-                    
-                    splitShadowHue: target.shadowsSat > 10 ? target.shadowsHue : 0,
-                    splitShadowSat: target.shadowsSat > 10 ? Math.min(target.shadowsSat * 0.5, 50) : 0,
-                    splitHighlightHue: target.highlightsSat > 10 ? target.highlightsHue : 0,
-                    splitHighlightSat: target.highlightsSat > 10 ? Math.min(target.highlightsSat * 0.5, 50) : 0,
                 };
                 
-                // HSL
                 for (let i = 0; i < 8; i++) {
                     if (source.hslWeight[i] > 1 && target.hslWeight[i] > 1) {
                         params.hslHue.push(clamp((target.hslHue[i] - source.hslHue[i]) * 0.5, -100, 100));
@@ -771,6 +748,124 @@
                 }
                 
                 return params;
+            }
+        }
+        
+        // ============ 直方图绘制 ============
+        function drawHistogram(canvasId, stats) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) {
+                console.error('Canvas not found:', canvasId);
+                return;
+            }
+            
+            // 设置 canvas 实际大小
+            const rect = canvas.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            
+            const ctx = canvas.getContext('2d');
+            ctx.scale(dpr, dpr);
+            
+            const w = rect.width;
+            const h = rect.height;
+            
+            // 清空画布
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.fillRect(0, 0, w, h);
+            
+            // 计算最大值用于归一化 (忽略极端值)
+            let maxVal = 1;
+            for (let i = 5; i < 250; i++) {
+                maxVal = Math.max(maxVal, stats.histR[i] || 0, stats.histG[i] || 0, stats.histB[i] || 0);
+            }
+            
+            // 平滑处理
+            function smooth(arr, windowSize) {
+                const result = [];
+                const half = Math.floor(windowSize / 2);
+                for (let i = 0; i < arr.length; i++) {
+                    let sum = 0, count = 0;
+                    for (let j = Math.max(0, i - half); j <= Math.min(arr.length - 1, i + half); j++) {
+                        sum += arr[j] || 0;
+                        count++;
+                    }
+                    result.push(sum / count);
+                }
+                return result;
+            }
+            
+            const smoothR = smooth(stats.histR, 3);
+            const smoothG = smooth(stats.histG, 3);
+            const smoothB = smooth(stats.histB, 3);
+            const smoothLum = smooth(stats.histLum, 3);
+            
+            // 重新计算最大值
+            maxVal = 1;
+            for (let i = 5; i < 250; i++) {
+                maxVal = Math.max(maxVal, smoothR[i], smoothG[i], smoothB[i]);
+            }
+            
+            const barWidth = w / 256;
+            const padding = 5;
+            const chartHeight = h - padding * 2;
+            
+            // 绘制函数
+            function drawChannel(data, color) {
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.moveTo(0, h - padding);
+                
+                for (let i = 0; i < 256; i++) {
+                    const x = i * barWidth;
+                    const val = data[i] || 0;
+                    const barHeight = Math.min((val / maxVal) * chartHeight, chartHeight);
+                    ctx.lineTo(x, h - padding - barHeight);
+                }
+                
+                ctx.lineTo(w, h - padding);
+                ctx.closePath();
+                ctx.fill();
+            }
+            
+            // 绘制 RGB
+            drawChannel(smoothR, 'rgba(255, 80, 80, 0.5)');
+            drawChannel(smoothG, 'rgba(80, 255, 80, 0.5)');
+            drawChannel(smoothB, 'rgba(80, 80, 255, 0.5)');
+            
+            // 绘制亮度曲线
+            let lumMax = 1;
+            for (let i = 5; i < 250; i++) {
+                lumMax = Math.max(lumMax, smoothLum[i]);
+            }
+            
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            
+            for (let i = 0; i < 256; i++) {
+                const x = i * barWidth;
+                const val = smoothLum[i] || 0;
+                const y = h - padding - Math.min((val / lumMax) * chartHeight, chartHeight);
+                
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.stroke();
+            
+            // 绘制刻度线
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= 4; i++) {
+                const x = (i / 4) * w;
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, h);
+                ctx.stroke();
             }
         }
         
@@ -789,6 +884,8 @@
         
         let sourceImg = null;
         let targetImg = null;
+        let sourceStats = null;
+        let targetStats = null;
         
         function handleFileSelect(input, preview, box, isSource) {
             const file = input.files[0];
@@ -825,19 +922,22 @@
             loading.classList.add('active');
             results.classList.remove('active');
             
-            // 使用 setTimeout 让 UI 更新
             setTimeout(() => {
                 try {
                     const sourceData = analyzer.getImageData(sourceImg);
                     const targetData = analyzer.getImageData(targetImg);
                     
-                    const sourceStats = analyzer.analyze(sourceData);
-                    const targetStats = analyzer.analyze(targetData);
+                    sourceStats = analyzer.analyze(sourceData);
+                    targetStats = analyzer.analyze(targetData);
+                    
+                    console.log('Source stats:', sourceStats);
+                    console.log('Target stats:', targetStats);
                     
                     const params = analyzer.calculateAdjustments(sourceStats, targetStats);
                     
-                    displayResults(params, sourceStats, targetStats);
+                    displayResults(params);
                 } catch (error) {
+                    console.error(error);
                     alert('分析出错: ' + error.message);
                 } finally {
                     loading.classList.remove('active');
@@ -845,7 +945,7 @@
             }, 100);
         });
         
-        function displayResults(params, sourceStats, targetStats) {
+        function displayResults(params) {
             // 主要参数
             const mainParams = [
                 { name: 'Exposure 曝光', key: 'exposure', isEV: true },
@@ -914,56 +1014,18 @@
                 `;
             }).join('');
             
-            // 绘制直方图
-            drawHistogram('sourceHist', sourceStats);
-            drawHistogram('targetHist', targetStats);
-            
+            // 显示结果区域
             results.classList.add('active');
+            
+            // 等待 DOM 更新后绘制直方图
+            requestAnimationFrame(() => {
+                setTimeout(() => {
+                    drawHistogram('sourceHist', sourceStats);
+                    drawHistogram('targetHist', targetStats);
+                }, 50);
+            });
+            
             results.scrollIntoView({ behavior: 'smooth' });
-        }
-        
-        function drawHistogram(canvasId, stats) {
-            const canvas = document.getElementById(canvasId);
-            const ctx = canvas.getContext('2d');
-            
-            // 设置实际尺寸
-            canvas.width = canvas.offsetWidth * 2;
-            canvas.height = canvas.offsetHeight * 2;
-            ctx.scale(2, 2);
-            
-            const w = canvas.offsetWidth;
-            const h = canvas.offsetHeight;
-            
-            ctx.clearRect(0, 0, w, h);
-            
-            // 找最大值
-            const maxR = Math.max(...stats.histR);
-            const maxG = Math.max(...stats.histG);
-            const maxB = Math.max(...stats.histB);
-            const maxVal = Math.max(maxR, maxG, maxB) || 1;
-            
-            // 绘制 RGB
-            const colors = [
-                { hist: stats.histR, color: 'rgba(255, 100, 100, 0.5)' },
-                { hist: stats.histG, color: 'rgba(100, 255, 100, 0.5)' },
-                { hist: stats.histB, color: 'rgba(100, 100, 255, 0.5)' },
-            ];
-            
-            for (const { hist, color } of colors) {
-                ctx.fillStyle = color;
-                ctx.beginPath();
-                ctx.moveTo(0, h);
-                
-                for (let i = 0; i < 256; i++) {
-                    const x = i / 255 * w;
-                    const y = h - (hist[i] / maxVal * h * 0.9);
-                    ctx.lineTo(x, y);
-                }
-                
-                ctx.lineTo(w, h);
-                ctx.closePath();
-                ctx.fill();
-            }
         }
     </script>
 </body>
